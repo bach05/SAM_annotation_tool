@@ -7,8 +7,8 @@ This is a tool to label images with the support of Segment Anything Model (SAM).
 ## INSTALLATION
 
 ```bash
-git clone
-cd cd SAM_annotation_tool/
+git clone https://github.com/bach05/SAM_annotation_tool.git
+cd SAM_annotation_tool/
 pip install -r requirements.txt 
 ```
 Download the `sam_vit_l_0b3195.pth` weights from [official repository](https://github.com/facebookresearch/segment-anything) and place it into 'SAM_annotation_tool/
