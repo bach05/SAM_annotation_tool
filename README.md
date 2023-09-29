@@ -15,6 +15,10 @@ Download the `sam_vit_l_0b3195.pth` weights from [official repository](https://g
 ' folder. 
 Put the images you want to label into `data` folder. 
 
+<span style="color:red">**TO DO:**</span>
+- Add configuration file for paths and labels that are currently hard coded 
+
+
 ## USAGE
 
 ```bash
