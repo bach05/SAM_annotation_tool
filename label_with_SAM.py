@@ -4,58 +4,7 @@ from segment_anything import SamAutomaticMaskGenerator, sam_model_registry, SamP
 import cv2
 import os
 import matplotlib.pyplot as plt
-
-
-def show_mask(mask, ax, random_color=False, wrong=False, correct=False, empty=False):
-    if correct:
-        color = np.array([0 / 255, 0 / 255, 128 / 255, 0.6])
-    elif wrong:
-        color = np.array([128 / 255, 0 / 255, 0 / 255, 0.6])
-    elif empty:
-        color = np.array([0 / 255, 128 / 255, 0 / 255, 0.6])
-    elif random_color:
-        color = np.concatenate([np.random.random(3), np.array([0.6])], axis=0)
-    else:
-        color = np.array([30 / 255, 144 / 255, 255 / 255, 0.6])
-    h, w = mask.shape[-2:]
-    mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
-    ax.imshow(mask_image)
-
-
-def show_points(coords, labels, ax, marker_size=375):
-    pos_points = coords[labels == 1]
-    neg_points = coords[labels == 0]
-    ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
-    ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
-
-
-def show_box(box, ax):
-    x0, y0 = box[0], box[1]
-    w, h = box[2] - box[0], box[3] - box[1]
-    ax.add_patch(plt.Rectangle((x0, y0), w, h, edgecolor='green', facecolor=(0, 0, 0, 0), lw=2))
-
-def draw_circle(event,x,y,flags,param):
-    global mouseX,mouseY
-    if event == cv2.EVENT_LBUTTONDBLCLK:
-        cv2.circle(image,(x,y),5,(255,0,0), -1)
-        mouseX,mouseY = x,y
-
-
-def show_anns(anns):
-    if len(anns) == 0:
-        return
-    sorted_anns = sorted(anns, key=(lambda x: x['area']), reverse=True)
-    ax = plt.gca()
-    ax.set_autoscale_on(False)
-
-    img = np.ones((sorted_anns[0]['segmentation'].shape[0], sorted_anns[0]['segmentation'].shape[1], 4))
-    img[:,:,3] = 0
-    for ann in sorted_anns:
-        m = ann['segmentation']
-        color_mask = np.concatenate([np.random.random(3), [0.35]])
-        img[m] = color_mask
-    ax.imshow(img)
-
+import json
 
 class ImageProcessor:
     def __init__(self, image, sam, label_info):
@@ -65,18 +14,26 @@ class ImageProcessor:
         self.color_list = []
         self.image = image
         self.show_image = image.copy()
-        self.mask = None
+        self.mask = []
         self.label_info = label_info
         self.label_ids = list(label_info.keys())
+        for i in self.label_ids:
+            self.mask.append(np.zeros_like(image[:,:,0]))
 
-        self.mask_generator = SamAutomaticMaskGenerator(sam, min_mask_region_area=100)
+        self.mask_generator = SamAutomaticMaskGenerator(sam, min_mask_region_area=int((image.shape[1] * image.shape[0])*0.0002))
         self.predictor = SamPredictor(sam)
         self.predictor.set_image(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
         self.selected_class = None
+        self.toggle_new_obj = True
+
+        # Fixed size for the display window
+        self.fixed_window_size = (1000, 800)
+        self.button_height = image.shape[1] // 10
+        self.point_size = int((max(image.shape[1], image.shape[0]))*0.005)
 
     def click_event(self, event, x, y, flags, param):
         if event == cv2.EVENT_LBUTTONDOWN:
-            if y < 30:  # Check if the click is within the button area for class selection
+            if y < self.button_height:  # Check if the click is within the button area for class selection
                 # Calculate the class ID based on the x-coordinate of the click
                 button_width = self.image.shape[1] // len(self.label_info)
                 selected_class = x // button_width   # Adding 1 to match your class IDs
@@ -89,16 +46,16 @@ class ImageProcessor:
                     print("Invalid class selection")
             else:
                 # Add a positive point if the click is outside the button area
-                self.input_point.append((x, y-30))
+                self.input_point.append((x, y-self.button_height))
                 self.input_label.append(1)
                 self.color_list.append((0, 0, 255))
-                print(f"[POSITIVE] Point clicked at ({x}, {y-30})")
+                print(f"[POSITIVE] Point clicked at ({x}, {y-self.button_height})")
                 self.draw_points()
         elif event == cv2.EVENT_RBUTTONDOWN:
-            self.input_point.append((x, y-30))
+            self.input_point.append((x, y-self.button_height))
             self.input_label.append(0)
             self.color_list.append((255, 0, 0))
-            print(f"[NEGATIVE] Point clicked at ({x}, {y-30})")
+            print(f"[NEGATIVE] Point clicked at ({x}, {y-self.button_height})")
             self.draw_points()
 
     def show_mask(self, mask, class_id=None):
@@ -118,17 +75,14 @@ class ImageProcessor:
         # use `addWeighted` to blend the two images
         # the object will be tinted toward `color`
         self.show_image = cv2.addWeighted(self.image, 0.6, masked_img, 0.4, 0)
-        if self.mask is None:
-            self.mask = np.where(mask, class_id, np.zeros_like(mask))
-        else:
-            self.mask[mask] = class_id
+        self.mask[class_id] = np.where(mask, class_id, np.zeros_like(mask))
         print("Updated mask!")
 
     def draw_points(self):
         for i,point in enumerate(self.input_point):
             color = self.color_list[i]
-            cv2.circle(self.show_image, point, 7, (255,255,255), -1)
-            cv2.circle(self.show_image, point, 5, color, -1)
+            cv2.circle(self.show_image, point, self.point_size+int(max(self.point_size*0.1, 2)), (255,255,255), -1)
+            cv2.circle(self.show_image, point, self.point_size, color, -1)
 
     def execute_prediction(self):
         if len(self.input_label) > 0:
@@ -159,12 +113,17 @@ class ImageProcessor:
         return int(class_id)
 
     def process_image(self):
-        cv2.namedWindow('image')
+        cv2.namedWindow('image', cv2.WINDOW_NORMAL)  # Create a resizable window
+        cv2.resizeWindow('image', self.fixed_window_size[0], self.fixed_window_size[1])  # Set fixed window size
         cv2.setMouseCallback('image', self.click_event)
 
         # Calculate the height for each button
-        button_height = 30
+        button_height = self.button_height
         button_width = self.image.shape[1] // len(self.label_info)
+
+        # Calculate text size and thickness based on button height
+        font_scale = button_width / 300  # You can adjust the divisor to control text size
+        thickness = max(int(2*font_scale), 1)  # Ensure thickness is at least 1
 
         # Create an image to display buttons and the original image
         button_image = np.zeros((button_height, self.image.shape[1], 3), dtype=np.uint8)
@@ -175,7 +134,7 @@ class ImageProcessor:
             button_x_end = (i + 1) * button_width
             cv2.rectangle(button_image, (button_x_start, 0), (button_x_end, button_height), info['color'], -1)
             cv2.putText(button_image, f'{class_id}: {info["name"]}', (button_x_start + 5, button_height - 10),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1)
+                        cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), thickness)
 
 
         while True:
@@ -195,10 +154,14 @@ class ImageProcessor:
                 self.input_point = []
                 self.input_label = []
             elif key == ord('q'):
-                if self.mask is None:
+                self.mask = np.array(self.mask)
+                if self.mask.sum()==0:
                     print("No mask set")
+                    self.mask = None
                     break
                 else:
+                    self.mask = self.mask.max(axis=0)
+                    self.mask = np.clip(self.mask, 0, len(self.label_ids)-1)
                     self.mask = self.mask.astype(np.uint8)
                     break
 
@@ -208,39 +171,25 @@ class ImageProcessor:
 
 
 
-
 if __name__ == "__main__":
 
-    sam = sam_model_registry["vit_l"](checkpoint="./sam_vit_l_0b3195.pth").cuda()
+    # Read configuration from JSON file
+    with open('config.json', 'r') as config_file:
+        config = json.load(config_file)
 
-    # label_info = {
-    #     0:{"name":"background", "color":(0, 0, 255)},
-    #     1:{"name":"big_object",  "color":(0, 255, 0)},
-    #     2:{"name":"small_object", "color":(255, 0, 0)},
-    #     3:{"name":"long_object", "color":(0, 255, 255)},
-    #     4:{"name":"flat_object", "color":(255, 255, 0)}
-    # }
+    sam_model_name = config["sam_model"]["name"]
+    checkpoint_path = config["sam_model"]["checkpoint_path"]
+    sam = sam_model_registry[sam_model_name](checkpoint=checkpoint_path).cuda()
 
-    label_info = {
-        0:{"name":"background", "color":(0, 0, 255)},
-        1:{"name":"dog",  "color":(0, 255, 0)},
-        2:{"name":"cat", "color":(255, 0, 0)},
-    }
+    # Convert string keys to integers for label_info dictionary
+    label_info = {int(key): value for key, value in config["label_info"].items()}
 
-    raw_data = "example"
-    out_path = "dataset_example"
-    img_out_path = os.path.join(out_path, "imgs")
-    label_out_path = os.path.join(out_path, "labels")
+    raw_data = config["raw_data_path"]
+    out_path = config["output_path"]["root"]
+    img_out_path = config["output_path"]["img_subpath"]
+    label_out_path = config["output_path"]["label_subpath"]
 
-    # Check if the folder exists
-    if not os.path.exists(out_path):
-        # If it doesn't exist, create it
-        os.mkdir(out_path)
-        os.mkdir(img_out_path)
-        os.mkdir(label_out_path)
-        print(f"Folder '{out_path}' created successfully.")
-    else:
-        print(f"Folder '{out_path}' already exists.")
+    max_dimension = int(config["max_image_dimension"])
 
     # Get a list of all files in the folder
     files = os.listdir(raw_data)
@@ -257,6 +206,27 @@ if __name__ == "__main__":
         if any(file.lower().endswith(ext) for ext in image_extensions):
             image_paths.append(os.path.join(raw_data, file))
 
+    # Check if the folder exists
+    if not os.path.exists(out_path):
+        # If it doesn't exist, create it
+        os.mkdir(out_path)
+        os.mkdir(img_out_path)
+        os.mkdir(label_out_path)
+        print(f"Folder '{out_path}' created successfully.")
+        index = 0
+    else:
+        print(f"Folder '{out_path}' already exists.")
+        # Ask the user if they want to resume a previous labeling
+        resume_labeling = input("Do you want to resume a previous labeling? (y/n) ").strip().lower()
+
+        if resume_labeling == 'y':
+            index = int(input("Please insert the index of the last labelled image: ").strip())
+            print(f"Restarting from image {image_paths[index+1]}")
+        else:
+            index = 0
+            print("Starting a new labeling session.")
+            print("\033[91m***[WARNING]*** CURRENT LABELS WILL BE OVERWRITTEN.\033[0m")
+
     print("Image Processor Usage Instructions:")
     print("1. Click top buttons to select a label.")
     print("2a. Click on the image to set points of interest. Left click on target object (positive point), right click on background (negative point)")
@@ -267,11 +237,20 @@ if __name__ == "__main__":
     print()
 
     # Now you have a list of image file paths that you can open and process one by one
-    for idx, image_path in enumerate(image_paths):
+    for idx, image_path in enumerate(image_paths[index+1:]):
         print(f"Processing image: {image_path}, {idx+1} of {len(image_paths)}")
 
         out_name = image_path.split("/")[-1].split(".")[0]
         image = cv2.imread(image_path)
+
+        # Resize the image if either dimension is larger than 1024
+        if image.shape[0] > max_dimension or image.shape[1] > max_dimension:
+            # Calculate new dimensions while maintaining aspect ratio
+            aspect_ratio = image.shape[1] / image.shape[0]
+            new_height = min(max_dimension, int(max_dimension / aspect_ratio))
+            new_width = min(max_dimension, int(aspect_ratio * max_dimension))
+            image = cv2.resize(image, (new_width, new_height), interpolation = cv2.INTER_CUBIC)
+
         img_proc = ImageProcessor(image, sam, label_info)
         image, mask = img_proc.process_image()
 
@@ -290,7 +269,7 @@ if __name__ == "__main__":
 
         # Display the combined image in a single window
         cv2.imshow("SAVED Image and Mask", combined_image)
-        cv2.waitKey(10000)  # Wait for 1 second (1000 milliseconds)
+        cv2.waitKey(1000)  # Wait for 1 second (1000 milliseconds)
         cv2.destroyAllWindows()
 
 

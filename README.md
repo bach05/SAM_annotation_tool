@@ -13,11 +13,31 @@ pip install -r requirements.txt
 ```
 Download the `sam_vit_l_0b3195.pth` weights from [official repository](https://github.com/facebookresearch/segment-anything) and place it into 'SAM_annotation_tool/
 ' folder. 
-Put the images you want to label into `data` folder. 
 
-<span style="color:red">**TO DO:**</span>
-- Add configuration file for paths and labels that are currently hard coded 
+Please, use the `config.json` file to specify your requirements:
 
+```json
+{
+    "sam_model": {
+        "name": "vit_l",
+        "checkpoint_path": "./sam_vit_l_0b3195.pth"
+    },
+    "label_info": {
+        "0": {"name": "background", "color": [0, 0, 255]},
+        "1": {"name": "label1", "color": [0, 255, 0]},
+        "2": {"name": "label2", "color": [255, 0, 0]},
+          .
+          .
+          .
+    },
+    "raw_data_path": "folder_containing_the_images_to_label",
+    "output_path": {
+        "root": "destination_for_labelled_data",
+        "img_subpath": "imgs",
+        "label_subpath": "labels"
+    },
+    "max_image_dimension": 1024
+```
 
 ## USAGE
 
