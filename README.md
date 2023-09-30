@@ -71,6 +71,12 @@ Pressing `s` again you can update the preview. Repeat steps 2,3 until you are sa
 
 ![](images/5.png)
 
+Pressing `m` you can active the brush mode. Brush mode alloe to manually modify the mask, by moving the mouse on the image and
+- With **LEFT** mouse click you can add pixels to the mask
+- With **RIGHT** mouse click you can remove pixels from the mask
+
+![](images/brush.png)
+
 ### 4. Add more objects
 If you want to add a new object with a different label, press `a` and repeat steps 1,2,3 until you are satisfied.
 

@@ -32,7 +32,7 @@ class ImageProcessor:
         self.point_size = int((max(image.shape[1], image.shape[0]))*0.005)
 
     def click_event(self, event, x, y, flags, param):
-        if event == cv2.EVENT_LBUTTONDOWN:
+        if event == cv2.EVENT_LBUTTONDOWN and not self.brush_mode:
             if y < self.button_height:  # Check if the click is within the button area for class selection
                 # Calculate the class ID based on the x-coordinate of the click
                 button_width = self.image.shape[1] // len(self.label_info)
@@ -51,12 +51,55 @@ class ImageProcessor:
                 self.color_list.append((0, 0, 255))
                 print(f"[POSITIVE] Point clicked at ({x}, {y-self.button_height})")
                 self.draw_points()
-        elif event == cv2.EVENT_RBUTTONDOWN:
+        elif event == cv2.EVENT_RBUTTONDOWN and not self.brush_mode:
             self.input_point.append((x, y-self.button_height))
             self.input_label.append(0)
             self.color_list.append((255, 0, 0))
             print(f"[NEGATIVE] Point clicked at ({x}, {y-self.button_height})")
             self.draw_points()
+
+        elif event == cv2.EVENT_MOUSEMOVE and self.brush_mode:
+            if y > self.button_height:
+                paint_brush = np.zeros_like(self.image, dtype=np.uint8)
+                cv2.circle(paint_brush, (x,y-self.button_height), self.brush_radius, (128, 128, 128), -1)  # Draw a filled circle at the last clicked point
+
+                class_id = self.selected_class
+                color = self.label_info[class_id]['color']
+                mask = self.mask[class_id]==class_id
+                masked_img = np.where(mask[..., None], color, self.image).astype(np.uint8)
+                # use `addWeighted` to blend the two images
+                temp_image = cv2.addWeighted(self.image, 0.6,masked_img, 0.4, 0)
+                self.show_image = cv2.addWeighted(temp_image, 0.6, paint_brush, 0.4, 0)
+
+        elif event == cv2.EVENT_RBUTTONDOWN and self.brush_mode:
+
+            paint_brush = np.zeros_like(self.image, dtype=np.uint8)
+            cv2.circle(paint_brush, (x, y - self.button_height), self.brush_radius, (128, 128, 128),
+                       -1)  # Draw a filled circle at the last clicked point
+            del_mask = (paint_brush[:, :, 0] == 128) & (paint_brush[:, :, 1] == 128) & (paint_brush[:, :, 2] == 128)
+            self.mask[self.selected_class][del_mask] = 0
+            mask = self.mask[self.selected_class] == self.selected_class
+            color = self.label_info[self.selected_class]['color']
+            masked_img = np.where(mask[..., None], color, self.image).astype(np.uint8)
+            # use `addWeighted` to blend the two images
+            temp_image = cv2.addWeighted(self.image, 0.6, masked_img, 0.4, 0)
+            self.show_image = cv2.addWeighted(temp_image, 0.6, paint_brush, 0.4, 0)
+
+
+        elif event == cv2.EVENT_LBUTTONDOWN and self.brush_mode:
+
+            paint_brush = np.zeros_like(self.image, dtype=np.uint8)
+            cv2.circle(paint_brush, (x, y - self.button_height), self.brush_radius, (128, 128, 128),
+                       -1)  # Draw a filled circle at the last clicked point
+            del_mask = (paint_brush[:, :, 0] == 128) & (paint_brush[:, :, 1] == 128) & (paint_brush[:, :, 2] == 128)
+            color = self.label_info[self.selected_class]['color']
+            self.mask[self.selected_class][del_mask] = self.selected_class
+            mask = self.mask[self.selected_class] == self.selected_class
+            masked_img = np.where(mask[..., None], color, self.image).astype(np.uint8)
+            # use `addWeighted` to blend the two images
+            temp_image = cv2.addWeighted(self.image, 0.6, masked_img, 0.4, 0)
+            self.show_image = cv2.addWeighted(temp_image, 0.6, paint_brush, 0.4, 0)
+
 
     def show_mask(self, mask, class_id=None):
 
@@ -112,8 +155,11 @@ class ImageProcessor:
         class_id = input("Enter class number ID: ")
         return int(class_id)
 
+    def update_brush_radius(self, value):
+        self.brush_radius = value
+
     def process_image(self):
-        cv2.namedWindow('image', cv2.WINDOW_NORMAL)  # Create a resizable window
+        cv2.namedWindow('image', cv2.WINDOW_NORMAL | cv2.WINDOW_GUI_NORMAL)  # Create a resizable window
         cv2.resizeWindow('image', self.fixed_window_size[0], self.fixed_window_size[1])  # Set fixed window size
         cv2.setMouseCallback('image', self.click_event)
 
@@ -136,6 +182,10 @@ class ImageProcessor:
             cv2.putText(button_image, f'{class_id}: {info["name"]}', (button_x_start + 5, button_height - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 0), thickness)
 
+        self.brush_mode = False  # Flag to indicate whether brush mode is active
+        self.brush_radius = 50  # Radius of the brush
+
+        cv2.createTrackbar('Brush Radius', 'image', self.brush_radius, 100, self.update_brush_radius)
 
         while True:
             # instructions = f"[current label {self.selected_class}] 's'=show temporary mask, 'q'=save and proceed"
@@ -153,6 +203,17 @@ class ImageProcessor:
                 self.selected_class = None
                 self.input_point = []
                 self.input_label = []
+            elif key == ord('m'):
+                self.brush_mode = not self.brush_mode  # Toggle brush mode on/off
+                if not self.brush_mode:
+                    color = self.label_info[self.selected_class]['color']
+                    mask = self.mask[self.selected_class] == self.selected_class
+                    masked_img = np.where(mask[..., None], color, self.image).astype(np.uint8)
+                    # use `addWeighted` to blend the two images
+                    self.show_image = cv2.addWeighted(self.image, 0.6, masked_img, 0.4, 0)
+                else:
+                    print("Brush mode ACTIVATED. Press 'm' again to deactivate.")
+
             elif key == ord('q'):
                 self.mask = np.array(self.mask)
                 if self.mask.sum()==0:
@@ -213,7 +274,7 @@ if __name__ == "__main__":
         os.mkdir(img_out_path)
         os.mkdir(label_out_path)
         print(f"Folder '{out_path}' created successfully.")
-        index = 0
+        index = -1
     else:
         print(f"Folder '{out_path}' already exists.")
         # Ask the user if they want to resume a previous labeling
@@ -223,7 +284,7 @@ if __name__ == "__main__":
             index = int(input("Please insert the index of the last labelled image: ").strip())
             print(f"Restarting from image {image_paths[index+1]}")
         else:
-            index = 0
+            index = -1
             print("Starting a new labeling session.")
             print("\033[91m***[WARNING]*** CURRENT LABELS WILL BE OVERWRITTEN.\033[0m")
 
@@ -231,6 +292,7 @@ if __name__ == "__main__":
     print("1. Click top buttons to select a label.")
     print("2a. Click on the image to set points of interest. Left click on target object (positive point), right click on background (negative point)")
     print("2b. Press 'a' to add a new object to the current mask")
+    print("2c. Press 'm' to brush manually the mask: left click to add, right click to remove")
     print("3. Press 's' to process the image and display the annotated mask.")
     print("4. Repeat step 2 and 3 until you are satified.")
     print("4. Press 'q' to save and proceed to the next image.")

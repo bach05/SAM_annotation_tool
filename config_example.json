@@ -1,0 +1,18 @@
+{
+    "sam_model": {
+        "name": "vit_l",
+        "checkpoint_path": "./sam_vit_l_0b3195.pth"
+    },
+    "label_info": {
+        "0": {"name": "background", "color": [0, 0, 255]},
+        "1": {"name": "dog", "color": [0, 255, 0]},
+        "2": {"name": "cat", "color": [255, 0, 0]}
+    },
+    "raw_data_path": "example",
+    "output_path": {
+        "root": "dataset_example",
+        "img_subpath": "imgs",
+        "label_subpath": "labels"
+    },
+    "max_image_dimension": 1024
+}
