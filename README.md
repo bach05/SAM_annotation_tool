@@ -42,7 +42,7 @@ Please, use the `config.json` file to specify your requirements:
 ## USAGE
 
 ```bash
-python3 label_with_SAM.py
+python3 label_with_SAM.py "path_to_config_file"
 ```
 
 The GUI will show up. In the terminal you can have a feedback on the current action. 
