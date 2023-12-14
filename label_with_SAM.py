@@ -18,7 +18,7 @@ class ImageProcessor:
         self.mask = []
         self.label_info = label_info
         self.label_ids = list(label_info.keys())
-        for i in range(self.label_ids[-1]):
+        for i in range(self.label_ids[-1]+1):
             self.mask.append(np.zeros_like(image[:,:,0]))
 
         self.mask_generator = SamAutomaticMaskGenerator(sam, min_mask_region_area=int((image.shape[1] * image.shape[0])*0.0002))
@@ -224,7 +224,7 @@ class ImageProcessor:
                     break
                 else:
                     self.mask = self.mask.max(axis=0)
-                    self.mask = np.clip(self.mask, 0, len(self.label_ids)-1)
+                    #self.mask = np.clip(self.mask, 0, len(self.label_ids)-1)
                     self.mask = self.mask.astype(np.uint8)
                     break
 
