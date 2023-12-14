@@ -5,6 +5,7 @@ import cv2
 import os
 import matplotlib.pyplot as plt
 import json
+import argparse
 
 class ImageProcessor:
     def __init__(self, image, sam, label_info):
@@ -231,11 +232,19 @@ class ImageProcessor:
         return self.image, self.mask
 
 
-
 if __name__ == "__main__":
 
+    parser = argparse.ArgumentParser(description='A script with string command-line parameters.')
+
+    # Adding a required string parameter
+    parser.add_argument('config_path', type=str, help='Path to config file.')
+
+    args = parser.parse_args()
+
+    config_path = args.config_path
+
     # Read configuration from JSON file
-    with open('config.json', 'r') as config_file:
+    with open(config_path, 'r') as config_file:
         config = json.load(config_file)
 
     sam_model_name = config["sam_model"]["name"]
@@ -247,8 +256,11 @@ if __name__ == "__main__":
 
     raw_data = config["raw_data_path"]
     out_path = config["output_path"]["root"]
+
     img_out_path = config["output_path"]["img_subpath"]
     label_out_path = config["output_path"]["label_subpath"]
+    img_out_path = os.path.join(out_path, img_out_path)
+    label_out_path = os.path.join(out_path, label_out_path)
 
     max_dimension = int(config["max_image_dimension"])
 
@@ -281,8 +293,22 @@ if __name__ == "__main__":
         resume_labeling = input("Do you want to resume a previous labeling? (y/n) ").strip().lower()
 
         if resume_labeling == 'y':
-            index = int(input("Please insert the index of the last labelled image: ").strip())
-            print(f"Restarting from image {image_paths[index+1]}")
+            last_image = input("Please insert thqe last labelled image: ").strip()
+
+            # Split the file name and extension
+            _, subfix = os.path.splitext(image_paths[0])
+            prefix, _ = os.path.splitext(last_image)
+
+            last_image = prefix+subfix
+
+            last_image = os.path.join(config["raw_data_path"], last_image)
+            try:
+                index = image_paths.index(last_image)
+                print(f"The index of '{last_image}' in image_paths is: {index}")
+                print(f"Restarting from image {image_paths[index + 1]}")
+            except ValueError:
+                print(f"'{last_image}' is not in the image_paths list. Restart from 0")
+                index = -1
         else:
             index = -1
             print("Starting a new labeling session.")
